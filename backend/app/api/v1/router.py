@@ -1,10 +1,11 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, tests, tasks, llm, files, gradebook, courses, notifications, profiles
+from app.api.v1.endpoints import auth, tests, tasks, llm, files, gradebook, courses, notifications, profiles, gamification
 
 api_router = APIRouter()
 
 api_router.include_router(auth.router, prefix="/auth", tags=["Аутентификация және Профиль"])
 api_router.include_router(profiles.router, prefix="/profiles", tags=["Профиль және Статистика"])
+api_router.include_router(gamification.router, prefix="/gamification", tags=["Геймификация және Skill Tree"])
 api_router.include_router(courses.router, prefix="/courses", tags=["Пәндер мен Курстар (Courses)"])
 api_router.include_router(tests.router, prefix="/tests", tags=["Тесттер және Сұрақтар"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["Тапсырмалар және Бағалау"])

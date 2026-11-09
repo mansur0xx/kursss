@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { GraduationCap, User, Bell, Check, Sparkles, Sun, Moon } from "lucide-react";
+import { GraduationCap, User, Bell, Check, Sparkles, Sun, Moon, Flame, Zap } from "lucide-react";
 
 interface NotificationItem {
   id: number;
@@ -71,28 +71,49 @@ export default function Navbar() {
           <span>EduPlatform</span>
         </Link>
 
-        <nav className="flex items-center gap-6">
+        <nav className="flex items-center gap-5">
           <Link
             href="/courses"
             className="text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition"
           >
-            📚 Пәндер каталогы
+            📚 Курстар
+          </Link>
+          <Link
+            href="/gamification"
+            className="text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition flex items-center gap-1"
+          >
+            🎮 Дағдылар & Рейтинг
           </Link>
           <Link
             href="/teacher"
             className="text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition"
           >
-            👨‍🏫 Мұғалім бөлімі
+            👨‍🏫 Мұғалім
           </Link>
           <Link
             href="/student"
             className="text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition"
           >
-            👨‍🎓 Студент бөлімі
+            👨‍🎓 Студент
           </Link>
         </nav>
 
         <div className="flex items-center gap-3">
+          {/* XP ЖӘНЕ STREAK ИНДИКАТОРЫ */}
+          <Link
+            href="/gamification"
+            className="hidden md:flex items-center gap-2 bg-gradient-to-r from-amber-50 to-indigo-50 dark:from-amber-950/40 dark:to-indigo-950/40 border border-amber-200/80 dark:border-amber-800/40 px-3 py-1.5 rounded-full text-xs font-bold text-slate-800 dark:text-slate-200 hover:shadow-sm transition"
+          >
+            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+              <Flame className="w-3.5 h-3.5 fill-amber-500" />
+              7 күн
+            </span>
+            <span className="text-slate-300 dark:text-slate-600">|</span>
+            <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
+              <Zap className="w-3.5 h-3.5 fill-indigo-500" />
+              1,450 XP
+            </span>
+          </Link>
           {/* ҚАРАҢҒЫ / ЖАРЫҚ РЕЖИМ БАТЫРМАСЫ (DARK MODE TOGGLE) */}
           <button
             onClick={toggleTheme}
