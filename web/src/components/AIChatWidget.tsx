@@ -106,7 +106,7 @@ export default function AIChatWidget() {
 
       {/* 2. АШЫЛҒАН ЧАТ ТЕРЕЗЕСІ (EXPANDED CHAT MODAL) */}
       {isOpen && (
-        <div className="w-[360px] sm:w-[420px] h-[540px] bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200">
+        <div className="w-[360px] sm:w-[420px] h-[540px] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200">
           {/* Чат тақырыбы */}
           <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2.5">
@@ -131,14 +131,14 @@ export default function AIChatWidget() {
           </div>
 
           {/* Хабарламалар аймағы */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50 dark:bg-slate-950/50">
             {messages.map((m) => (
               <div
                 key={m.id}
                 className={`flex gap-2.5 ${m.sender === "user" ? "justify-end" : "justify-start"}`}
               >
                 {m.sender === "ai" && (
-                  <div className="w-7 h-7 bg-purple-100 text-purple-700 rounded-lg flex items-center justify-center shrink-0 mt-1">
+                  <div className="w-7 h-7 bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 rounded-lg flex items-center justify-center shrink-0 mt-1">
                     <Sparkles className="w-4 h-4" />
                   </div>
                 )}
@@ -146,7 +146,7 @@ export default function AIChatWidget() {
                   className={`p-3 rounded-2xl text-xs sm:text-sm leading-relaxed max-w-[80%] ${
                     m.sender === "user"
                       ? "bg-indigo-600 text-white rounded-tr-sm"
-                      : "bg-white text-slate-800 border border-slate-200/80 rounded-tl-sm shadow-sm"
+                      : "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 rounded-tl-sm shadow-sm"
                   }`}
                 >
                   {m.text}
@@ -164,12 +164,12 @@ export default function AIChatWidget() {
           </div>
 
           {/* Дайын сұрақ подсказкалары */}
-          <div className="p-2.5 bg-white border-t border-slate-100 flex gap-1.5 overflow-x-auto text-[11px]">
+          <div className="p-2.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-1.5 overflow-x-auto text-[11px]">
             {quickPrompts.map((prompt, i) => (
               <button
                 key={i}
                 onClick={() => handleSend(prompt)}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 transition border border-slate-200"
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition border border-slate-200 dark:border-slate-700"
               >
                 {prompt}
               </button>
@@ -177,14 +177,14 @@ export default function AIChatWidget() {
           </div>
 
           {/* Мәтін енгізу және жіберу */}
-          <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
+          <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
               placeholder="Сұрағыңызды жазыңыз..."
-              className="flex-1 px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              className="flex-1 px-3.5 py-2 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             />
             <button
               onClick={() => handleSend()}
