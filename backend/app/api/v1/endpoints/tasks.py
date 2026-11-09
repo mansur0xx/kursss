@@ -77,9 +77,9 @@ async def submit_task(
 async def grade_submission(
     submission_id: int,
     grade: int,
-    feedback: str | None = None,
     current_user: Annotated[AuthenticatedUser, Depends(require_roles(["teacher", "admin"]))],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)],
+    feedback: str | None = None,
 ):
     """
     Тек Мұғалімдер үшін: студенттің үй жұмысын тексеріп, баға мен пікір қою.
