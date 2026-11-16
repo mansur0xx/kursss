@@ -4,6 +4,8 @@ from pydantic import computed_field
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Education Platform API"
+    app_name: str = "Education Platform API"
+    environment: str = "local"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
 
