@@ -1,9 +1,9 @@
 from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.security import AuthenticatedUser, get_current_user
-from app.db.session import get_db
 
 router = APIRouter()
 
@@ -257,7 +257,7 @@ async def complete_skill_node(
 
     # Дұрыс жауап: түйін аяқталды
     node["status"] = "completed"
-    
+
     # Келесі түйінді ашу (locked -> active)
     curr_index = INITIAL_SKILL_NODES.index(node)
     if curr_index + 1 < len(INITIAL_SKILL_NODES):

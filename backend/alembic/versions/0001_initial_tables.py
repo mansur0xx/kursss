@@ -1,13 +1,15 @@
 """Initial database tables: users, tests, questions, submissions, tasks
 
 Revision ID: 0001_initial_tables
-Revises: 
+Revises:
 Create Date: 2026-11-06 19:40:00.000000
 
 """
 from typing import Sequence, Union
-from alembic import op
+
 import sqlalchemy as sa
+
+from alembic import op
 
 revision: str = '0001_initial_tables'
 down_revision: Union[str, None] = None

@@ -1,6 +1,8 @@
 from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+
 from app.core.security import AuthenticatedUser, get_current_user, require_roles
 from app.llm.client import ollama_client
 
@@ -76,7 +78,7 @@ async def chat_with_ai(
     )
     try:
         reply = await ollama_client.generate_completion(system_prompt)
-    except Exception as e:
+    except Exception:
         reply = (
             f"Сәлеметсіз бе! Мен EduPlatform AI көмекшісімін. Қазіргі уақытта Ollama жергілікті контейнері "
             f"іске қосылуды күтуде (docker compose up -d). Сұрағыңыз: '{request.message}'. Бағдарламалау бойынша қандай көмек қажет?"

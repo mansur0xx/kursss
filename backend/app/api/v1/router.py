@@ -1,5 +1,17 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, tests, tasks, llm, files, gradebook, courses, notifications, profiles, gamification
+
+from app.api.v1.endpoints import (
+    auth,
+    courses,
+    files,
+    gamification,
+    gradebook,
+    llm,
+    notifications,
+    profiles,
+    tasks,
+    tests,
+)
 
 api_router = APIRouter()
 

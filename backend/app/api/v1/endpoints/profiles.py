@@ -1,14 +1,16 @@
 from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+
 from app.core.security import AuthenticatedUser, get_current_user
 from app.db.session import get_db
-from app.models.user import User
-from app.models.test import TestSubmission
-from app.models.task import TaskSubmission
 from app.models.course import CourseEnrollment
+from app.models.task import TaskSubmission
+from app.models.test import TestSubmission
+from app.models.user import User
 
 router = APIRouter()
 

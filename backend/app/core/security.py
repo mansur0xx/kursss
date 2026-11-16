@@ -1,8 +1,8 @@
 from typing import Annotated, Any
+
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from app.core.config import settings
 
 security_bearer = HTTPBearer()
 
@@ -29,10 +29,10 @@ async def get_current_user(
         # Продакшнда Keycloak JWKS public key арқылы верификацияланады.
         # Бастапқы кезеңде токеннің payload бөлігі декодталады.
         payload = jwt.decode(token, options={"verify_signature": False})
-        
+
         user_id: str = payload.get("sub", "")
         email: str = payload.get("email", "")
-        
+
         # Keycloak realm_access рөлдерін алу
         realm_access = payload.get("realm_access", {})
         roles: list[str] = realm_access.get("roles", [])

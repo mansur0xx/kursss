@@ -6,8 +6,10 @@ Create Date: 2026-11-07 14:22:00.000000
 
 """
 from typing import Sequence, Union
-from alembic import op
+
 import sqlalchemy as sa
+
+from alembic import op
 
 revision: str = '0002_add_courses_notifications_files'
 down_revision: Union[str, None] = '0001_initial_tables'
