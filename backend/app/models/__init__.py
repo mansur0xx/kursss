@@ -1,8 +1,6 @@
-from app.models.course import Course, CourseEnrollment
-from app.models.notification import Notification
-from app.models.task import Task, TaskSubmission
-from app.models.test import Question, Test, TestSubmission
+from app.models.attempt import Attempt
+from app.models.question import Question
+from app.models.quiz import Quiz
 from app.models.user import User
 
-__all__ = ["User", "Test", "Question", "TestSubmission", "Task", "TaskSubmission", "Course", "CourseEnrollment", "Notification"]
-
+__all__ = ["Attempt", "Question", "Quiz", "User"]

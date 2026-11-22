@@ -1,4 +1,4 @@
-from pydantic import computed_field
+from pydantic import AliasChoices, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_DB: str = "edu_db"
+    database_url: str = Field(
+        default="postgresql+psycopg://postgres:postgres@localhost:5432/edu_db",
+        validation_alias=AliasChoices("DATABASE_URL", "database_url"),
+    )
 
     @computed_field
     @property
@@ -48,11 +52,10 @@ class Settings(BaseSettings):
     ]
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=("../.env", ".env"),
         env_file_encoding="utf-8",
-        extra="ignore"
+        extra="ignore",
     )
 
 
 settings = Settings()
-
