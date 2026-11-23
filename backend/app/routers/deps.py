@@ -1,9 +1,11 @@
 from typing import NoReturn
 
 from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.jwt_utils import decode_access_token
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import get_last_authenticated_user_id
@@ -15,6 +17,8 @@ from app.services.exceptions import (
     NotFoundError,
     UnauthorizedError,
 )
+
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def raise_http_error(exc: AppError) -> NoReturn:
@@ -35,10 +39,26 @@ def raise_http_error(exc: AppError) -> NoReturn:
 
 def get_current_user(
     db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     x_user_id: int | None = Header(default=None, alias="X-User-Id"),
     x_user_role: str | None = Header(default=None, alias="X-User-Role"),
 ) -> User:
     repo = UserRepository(db)
+
+    if credentials is not None:
+        payload = decode_access_token(credentials.credentials)
+        if payload is None or not str(payload.get("sub", "")).isdigit():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Жарамсыз немесе мерзімі өткен токен",
+            )
+        user = repo.get(int(payload["sub"]))
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Пайдаланушы табылмады",
+            )
+        return user
 
     if x_user_id is not None:
         user = repo.get(x_user_id)

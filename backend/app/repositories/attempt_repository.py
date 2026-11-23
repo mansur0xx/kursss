@@ -12,6 +12,10 @@ class AttemptRepository:
         stmt = select(Attempt).where(Attempt.student_id == student_id).order_by(Attempt.id)
         return list(self.db.scalars(stmt).all())
 
+    def list_by_quiz(self, quiz_id: int) -> list[Attempt]:
+        stmt = select(Attempt).where(Attempt.quiz_id == quiz_id).order_by(Attempt.id)
+        return list(self.db.scalars(stmt).all())
+
     def get(self, attempt_id: int) -> Attempt | None:
         return self.db.get(Attempt, attempt_id)
 

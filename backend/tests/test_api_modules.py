@@ -298,3 +298,92 @@ def test_modules_4_5_6_quizzes_questions_publish_and_attempts():
     me_res = client.get("/api/attempts/me", headers={"X-User-Id": str(s1)})
     assert me_res.status_code == 200
     assert len(me_res.json()) == 1
+
+
+def test_jwt_bearer_ai_generation_results_and_csv():
+    # Register and login teacher -> get JWT Bearer token
+    client.post(
+        "/api/auth/register",
+        json={
+            "email": "jwt_teacher@example.com",
+            "full_name": "JWT Teacher",
+            "password": "password123",
+            "role": "teacher",
+        },
+    )
+    login_res = client.post(
+        "/api/auth/login",
+        json={"email": "jwt_teacher@example.com", "password": "password123"},
+    )
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    assert token
+    auth_header = {"Authorization": f"Bearer {token}"}
+
+    # Invalid JWT -> 401
+    assert (
+        client.get("/api/quizzes", headers={"Authorization": "Bearer invalid.token.here"}).status_code
+        == 401
+    )
+
+    # Create quiz using Bearer JWT
+    quiz_id = client.post(
+        "/api/quizzes",
+        headers=auth_header,
+        json={"title": "FastAPI AI Quiz", "topic": "FastAPI"},
+    ).json()["id"]
+
+    # Generate 3 questions via AI (falls back cleanly when Ollama is offline)
+    gen_res = client.post(
+        f"/api/quizzes/{quiz_id}/generate-questions",
+        headers=auth_header,
+        json={"topic": "FastAPI", "count": 3},
+    )
+    assert gen_res.status_code == 201
+    gen_data = gen_res.json()
+    assert gen_data["source"] in ("ollama", "fallback")
+    assert len(gen_data["questions"]) == 3
+
+    # Publish quiz
+    assert client.post(f"/api/quizzes/{quiz_id}/publish", headers=auth_header).status_code == 200
+
+    # Student registers, logs in, submits attempt via Bearer JWT
+    client.post(
+        "/api/auth/register",
+        json={
+            "email": "jwt_student@example.com",
+            "full_name": "JWT Student",
+            "password": "password123",
+            "role": "student",
+        },
+    )
+    s_token = client.post(
+        "/api/auth/login",
+        json={"email": "jwt_student@example.com", "password": "password123"},
+    ).json()["access_token"]
+    s_header = {"Authorization": f"Bearer {s_token}"}
+
+    att_res = client.post(
+        f"/api/quizzes/{quiz_id}/attempts",
+        headers=s_header,
+        json={"answers": [0, 1, 2]},
+    )
+    assert att_res.status_code == 201
+    assert att_res.json()["score"] == 3
+
+    # Teacher views results summary
+    summary_res = client.get(f"/api/quizzes/{quiz_id}/results", headers=auth_header)
+    assert summary_res.status_code == 200
+    summary = summary_res.json()
+    assert summary["total_attempts"] == 1
+    assert summary["average_percent"] == 100.0
+
+    # Student cannot view quiz results -> 403
+    assert client.get(f"/api/quizzes/{quiz_id}/results", headers=s_header).status_code == 403
+
+    # Teacher exports CSV
+    csv_res = client.get(f"/api/quizzes/{quiz_id}/results/export", headers=auth_header)
+    assert csv_res.status_code == 200
+    assert "text/csv" in csv_res.headers["content-type"]
+    assert "JWT Student" in csv_res.text
+

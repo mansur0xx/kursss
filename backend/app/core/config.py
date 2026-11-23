@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # RabbitMQ Broker
     RABBITMQ_URL: str = "amqp://guest:guest@rabbitmq:5672/"
 
+    # JWT Auth (local dev default; override in .env for production)
+    JWT_SECRET_KEY: str = "change-me-local-only"
+    JWT_EXPIRE_MINUTES: int = 60
+
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost:3000",

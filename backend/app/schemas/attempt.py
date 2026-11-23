@@ -17,3 +17,23 @@ class AttemptRead(BaseModel):
     score: int
     total: int
     submitted_at: datetime
+
+
+class QuizResultItem(BaseModel):
+    attempt_id: int
+    student_id: int
+    student_name: str
+    student_email: str
+    score: int
+    total: int
+    percent: float
+    submitted_at: datetime
+
+
+class QuizResultsSummary(BaseModel):
+    quiz_id: int
+    quiz_title: str
+    total_attempts: int
+    average_score: float
+    average_percent: float
+    results: list[QuizResultItem]

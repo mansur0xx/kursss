@@ -29,3 +29,8 @@ class UserRead(BaseModel):
     full_name: str
     role: str
     created_at: datetime
+
+
+class LoginResponse(UserRead):
+    access_token: str
+    token_type: str = "bearer"
