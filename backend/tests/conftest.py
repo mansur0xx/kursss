@@ -9,10 +9,12 @@ if not settings.database_url.endswith("_test"):
 
 import app.models  # noqa: E402,F401
 from app.core.database import Base, engine  # noqa: E402
+from app.services.auth_service import reset_auth_state  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def clean_state():
+    reset_auth_state()
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     yield

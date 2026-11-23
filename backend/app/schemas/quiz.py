@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.question import QuestionRead, QuestionStudentRead
+
 
 class QuizCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
@@ -22,3 +24,11 @@ class QuizRead(BaseModel):
     owner_id: int
     is_published: bool
     created_at: datetime
+
+
+class QuizDetailRead(QuizRead):
+    questions: list[QuestionRead] = Field(default_factory=list)
+
+
+class QuizStudentDetailRead(QuizRead):
+    questions: list[QuestionStudentRead] = Field(default_factory=list)

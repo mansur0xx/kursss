@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.quiz import Quiz
@@ -8,9 +8,13 @@ class QuizRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list(self, owner_id: int | None = None) -> list[Quiz]:
+    def list(self, owner_id: int | None = None, published_only: bool = False) -> list[Quiz]:
         stmt = select(Quiz).order_by(Quiz.id)
-        if owner_id is not None:
+        if published_only and owner_id is not None:
+            stmt = stmt.where(or_(Quiz.is_published.is_(True), Quiz.owner_id == owner_id))
+        elif published_only:
+            stmt = stmt.where(Quiz.is_published.is_(True))
+        elif owner_id is not None:
             stmt = stmt.where(Quiz.owner_id == owner_id)
         return list(self.db.scalars(stmt).all())
 
