@@ -22,23 +22,18 @@ services:
 
   # 2. Keycloak IAM (OIDC: кіру, тіркелу, student/teacher/admin рөлдері)
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0
+    image: quay.io/keycloak/keycloak:26.0
     container_name: edu_keycloak
-    command: start-dev
+    command: start-dev --import-realm
     restart: unless-stopped
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-edu_db}
-      KC_DB_USERNAME: ${POSTGRES_USER:-postgres}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: change-me-local-only
       KC_HEALTH_ENABLED: "true"
     ports:
       - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - ./keycloak/realm-quizai.json:/opt/keycloak/data/import/realm-quizai.json:ro
 
   # 3. Redis кэш және сессиялар
   redis:

@@ -29,10 +29,27 @@ class Settings(BaseSettings):
         )
 
     # Keycloak OIDC
-    KEYCLOAK_SERVER_URL: str = "http://keycloak:8080"
-    KEYCLOAK_REALM: str = "edu-realm"
-    KEYCLOAK_CLIENT_ID: str = "edu-client"
+    KEYCLOAK_SERVER_URL: str = "http://localhost:8080"
+    KEYCLOAK_REALM: str = "quizai"
+    KEYCLOAK_CLIENT_ID: str = "quizai-web"
+    KEYCLOAK_AUDIENCE: str = "quizai-api"
     KEYCLOAK_CLIENT_SECRET: str = ""
+
+    @property
+    def keycloak_issuer(self) -> str:
+        return f"{self.KEYCLOAK_SERVER_URL.rstrip('/')}/realms/{self.KEYCLOAK_REALM}"
+
+    @property
+    def keycloak_jwks_url(self) -> str:
+        return f"{self.keycloak_issuer}/protocol/openid-connect/certs"
+
+    @property
+    def keycloak_auth_url(self) -> str:
+        return f"{self.keycloak_issuer}/protocol/openid-connect/auth"
+
+    @property
+    def keycloak_token_url(self) -> str:
+        return f"{self.keycloak_issuer}/protocol/openid-connect/token"
 
     # Ollama Local LLM
     OLLAMA_BASE_URL: str = "http://ollama:11434"

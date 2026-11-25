@@ -19,8 +19,19 @@ class UserRepository:
         stmt = select(User).where(User.email == email)
         return self.db.scalars(stmt).first()
 
-    def create(self, *, email: str, full_name: str, role: str = "student") -> User:
-        user = User(email=email, full_name=full_name, role=role)
+    def get_by_keycloak_id(self, keycloak_id: str) -> User | None:
+        stmt = select(User).where(User.keycloak_id == keycloak_id)
+        return self.db.scalars(stmt).first()
+
+    def create(
+        self,
+        *,
+        email: str,
+        full_name: str,
+        role: str = "student",
+        keycloak_id: str | None = None,
+    ) -> User:
+        user = User(email=email, full_name=full_name, role=role, keycloak_id=keycloak_id)
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)

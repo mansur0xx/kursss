@@ -14,6 +14,10 @@ app = FastAPI(
     title=settings.app_name,
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
+    swagger_ui_init_oauth={
+        "clientId": settings.KEYCLOAK_CLIENT_ID,
+        "usePkceWithAuthorizationCodeGrant": True,
+    },
 )
 
 if settings.BACKEND_CORS_ORIGINS:

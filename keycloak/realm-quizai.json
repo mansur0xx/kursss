@@ -1,0 +1,136 @@
+{
+  "realm": "quizai",
+  "enabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "student",
+        "description": "Студент рөлі (әдепкі рөл)"
+      },
+      {
+        "name": "teacher",
+        "description": "Мұғалім рөлі"
+      },
+      {
+        "name": "admin",
+        "description": "Әкімші рөлі"
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-quizai",
+    "description": "${role_default-roles}",
+    "composite": true,
+    "clientRole": false,
+    "composites": {
+      "realm": [
+        "student",
+        "offline_access",
+        "uma_authorization"
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "quizai-web",
+      "name": "QuizAI Web & Swagger Client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": [
+        "http://localhost:8000/*",
+        "http://127.0.0.1:8000/*",
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+      ],
+      "protocolMappers": [
+        {
+          "name": "quizai-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "quizai-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "teacher@demo.kz",
+      "email": "teacher@demo.kz",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Demo",
+      "lastName": "Teacher",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo-teacher-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "teacher"
+      ]
+    },
+    {
+      "username": "student@demo.kz",
+      "email": "student@demo.kz",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Demo",
+      "lastName": "Student",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo-student-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "student"
+      ]
+    },
+    {
+      "username": "admin@demo.kz",
+      "email": "admin@demo.kz",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo-admin-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ]
+    }
+  ]
+}
