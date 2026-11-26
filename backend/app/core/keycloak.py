@@ -4,11 +4,8 @@ import time
 from typing import Any
 
 import httpx
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.user import User
-from app.repositories.user_repository import UserRepository
 
 
 def _b64url_decode(data: str) -> bytes:
@@ -30,7 +27,7 @@ def _decode_jwt_unverified(token: str) -> tuple[dict[str, Any], dict[str, Any]] 
         return None
 
 
-def _extract_role(payload: dict[str, Any]) -> str:
+def extract_role(payload: dict[str, Any]) -> str:
     realm_roles = payload.get("realm_access", {}).get("roles", [])
     if not isinstance(realm_roles, list):
         return "student"
@@ -50,11 +47,6 @@ def _audience_matches(payload: dict[str, Any], expected_aud: str) -> bool:
 
 
 def verify_keycloak_token(token: str) -> dict[str, Any] | None:
-    """
-    Keycloak OIDC JWT токенін тексеру:
-    - alg RS256 болса, Keycloak issuer, aud ('quizai-api') және exp мерзімін тексереді.
-    - Егер Keycloak JWKS қолжетімді болса, кілт ID (kid) сәйкестігін тексереді.
-    """
     decoded = _decode_jwt_unverified(token)
     if decoded is None:
         return None
@@ -64,7 +56,12 @@ def verify_keycloak_token(token: str) -> dict[str, Any] | None:
         return None
 
     iss = payload.get("iss")
-    if iss != settings.keycloak_issuer:
+    allowed_issuers = {
+        settings.keycloak_issuer,
+        settings.keycloak_issuer.replace("localhost", "127.0.0.1"),
+        settings.keycloak_issuer.replace("127.0.0.1", "localhost"),
+    }
+    if iss not in allowed_issuers:
         return None
 
     if not _audience_matches(payload, settings.KEYCLOAK_AUDIENCE):
@@ -72,6 +69,10 @@ def verify_keycloak_token(token: str) -> dict[str, Any] | None:
 
     exp = payload.get("exp")
     if not isinstance(exp, int) or exp < int(time.time()):
+        return None
+
+    sub = payload.get("sub")
+    if not isinstance(sub, str) or not sub:
         return None
 
     kid = header.get("kid")
@@ -87,44 +88,3 @@ def verify_keycloak_token(token: str) -> dict[str, Any] | None:
             pass
 
     return payload
-
-
-def sync_keycloak_user(db: Session, payload: dict[str, Any]) -> User | None:
-    """
-    Keycloak токеніндегі пайдаланушыны PostgreSQL users кестесімен синхрондау (JIT provisioning).
-    """
-    sub = payload.get("sub")
-    if not isinstance(sub, str) or not sub:
-        return None
-
-    email = payload.get("email") or payload.get("preferred_username") or f"{sub}@quizai.local"
-    full_name = (
-        payload.get("name")
-        or f"{payload.get('given_name', '')} {payload.get('family_name', '')}".strip()
-        or email.split("@")[0]
-    )
-    role = _extract_role(payload)
-
-    repo = UserRepository(db)
-    user = repo.get_by_keycloak_id(sub)
-    if user is None:
-        user = repo.get_by_email(email)
-        if user is not None:
-            user.keycloak_id = sub
-            user.role = role
-            return repo.save(user)
-        return repo.create(
-            email=email,
-            full_name=full_name[:120],
-            role=role,
-            keycloak_id=sub,
-        )
-
-    changed = False
-    if user.role != role:
-        user.role = role
-        changed = True
-    if user.email != email:
-        user.email = email
-        changed = True
-    return repo.save(user) if changed else user

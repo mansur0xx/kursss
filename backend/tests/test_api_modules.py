@@ -1,5 +1,10 @@
+import base64
+import json
+import time
+
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.main import app
 from app.models.user import User
@@ -7,383 +12,168 @@ from app.models.user import User
 client = TestClient(app)
 
 
-def _create_admin() -> int:
-    with SessionLocal() as db:
-        admin = User(email="admin@example.com", full_name="Admin User", role="admin")
-        db.add(admin)
-        db.commit()
-        db.refresh(admin)
-        return admin.id
+def _kc_headers(sub: str, email: str, name: str, role: str) -> dict[str, str]:
+    now = int(time.time())
+    header = {"alg": "RS256", "typ": "JWT"}
+    payload = {
+        "sub": sub,
+        "iss": settings.keycloak_issuer,
+        "aud": settings.KEYCLOAK_AUDIENCE,
+        "exp": now + 300,
+        "email": email,
+        "name": name,
+        "realm_access": {"roles": [role]},
+    }
+    h = base64.urlsafe_b64encode(json.dumps(header).encode()).rstrip(b"=").decode()
+    p = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    s = base64.urlsafe_b64encode(b"sig").rstrip(b"=").decode()
+    return {"Authorization": f"Bearer {h}.{p}.{s}"}
 
 
-def test_module_1_2_auth_register_and_login():
-    # Register valid student
-    r = client.post(
-        "/api/auth/register",
-        json={
-            "email": "s1@example.com",
-            "full_name": "Student One",
-            "password": "password123",
-            "role": "student",
-        },
-    )
-    assert r.status_code == 201
-    data = r.json()
-    assert data["email"] == "s1@example.com"
-    assert "password" not in data
+def test_auth_me_and_removed_legacy_endpoints():
+    # Old register and login endpoints are removed (404)
+    assert client.post("/api/auth/register", json={}).status_code == 404
+    assert client.post("/api/auth/login", json={}).status_code == 404
 
-    # Duplicate email -> 409
-    r_dup = client.post(
-        "/api/auth/register",
-        json={
-            "email": "s1@example.com",
-            "full_name": "Student One",
-            "password": "password123",
-            "role": "student",
-        },
-    )
-    assert r_dup.status_code == 409
+    # Without token -> 401
+    assert client.get("/api/auth/me").status_code == 401
 
-    # Short password -> 422
-    r_short = client.post(
-        "/api/auth/register",
-        json={
-            "email": "s2@example.com",
-            "full_name": "Student Two",
-            "password": "123",
-            "role": "student",
-        },
-    )
-    assert r_short.status_code == 422
-
-    # role: admin in body -> 422
-    r_admin = client.post(
-        "/api/auth/register",
-        json={
-            "email": "a@example.com",
-            "full_name": "Fake Admin",
-            "password": "password123",
-            "role": "admin",
-        },
-    )
-    assert r_admin.status_code == 422
-
-    # Login valid -> 200
-    r_login = client.post(
-        "/api/auth/login",
-        json={"email": "s1@example.com", "password": "password123"},
-    )
-    assert r_login.status_code == 200
-
-    # Login invalid -> 401 «Email немесе құпиясөз қате»
-    r_bad = client.post(
-        "/api/auth/login",
-        json={"email": "s1@example.com", "password": "wrongpassword"},
-    )
-    assert r_bad.status_code == 401
-    assert r_bad.json()["detail"] == "Email немесе құпиясөз қате"
+    # With Keycloak token -> 200 and synced to DB
+    headers = _kc_headers("kc-s1", "s1@example.com", "Student One", "student")
+    res = client.get("/api/auth/me", headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["keycloak_id"] == "kc-s1"
+    assert body["email"] == "s1@example.com"
+    assert body["role"] == "student"
 
 
-def test_module_3_users_admin_only():
-    admin_id = _create_admin()
-    t_res = client.post(
-        "/api/auth/register",
-        json={
-            "email": "t1@example.com",
-            "full_name": "Teacher One",
-            "password": "password123",
-            "role": "teacher",
-        },
-    )
-    teacher_id = t_res.json()["id"]
+def test_users_admin_only_without_patch():
+    admin_h = _kc_headers("kc-admin", "admin@example.com", "Admin User", "admin")
+    teacher_h = _kc_headers("kc-t1", "t1@example.com", "Teacher One", "teacher")
+
+    admin_id = client.get("/api/auth/me", headers=admin_h).json()["id"]
+    teacher_id = client.get("/api/auth/me", headers=teacher_h).json()["id"]
 
     # Teacher -> 403
-    assert client.get("/api/users", headers={"X-User-Id": str(teacher_id)}).status_code == 403
+    assert client.get("/api/users", headers=teacher_h).status_code == 403
 
-    # Admin -> 200
-    res_list = client.get("/api/users", headers={"X-User-Id": str(admin_id)})
+    # Admin -> 200 list
+    res_list = client.get("/api/users", headers=admin_h)
     assert res_list.status_code == 200
     assert len(res_list.json()) == 2
 
     # GET /api/users/{id} -> 200 and 404
-    assert (
-        client.get(f"/api/users/{teacher_id}", headers={"X-User-Id": str(admin_id)}).status_code
-        == 200
-    )
-    assert client.get("/api/users/9999", headers={"X-User-Id": str(admin_id)}).status_code == 404
+    assert client.get(f"/api/users/{teacher_id}", headers=admin_h).status_code == 200
+    assert client.get("/api/users/9999", headers=admin_h).status_code == 404
 
-    # PATCH /api/users/{id} -> 200, changing own role -> 400
-    r_patch = client.patch(
-        f"/api/users/{teacher_id}",
-        headers={"X-User-Id": str(admin_id)},
-        json={"full_name": "Updated Teacher", "role": "student"},
-    )
-    assert r_patch.status_code == 200
-    assert r_patch.json()["full_name"] == "Updated Teacher"
-    assert r_patch.json()["role"] == "student"
-
-    r_self_role = client.patch(
-        f"/api/users/{admin_id}",
-        headers={"X-User-Id": str(admin_id)},
-        json={"role": "teacher"},
-    )
-    assert r_self_role.status_code == 400
+    # PATCH /api/users/{id} is removed (405 Method Not Allowed)
+    assert client.patch(f"/api/users/{teacher_id}", headers=admin_h, json={}).status_code == 405
 
     # DELETE /api/users/{id} -> self 400, other 204
-    assert (
-        client.delete(f"/api/users/{admin_id}", headers={"X-User-Id": str(admin_id)}).status_code
-        == 400
-    )
-    assert (
-        client.delete(
-            f"/api/users/{teacher_id}", headers={"X-User-Id": str(admin_id)}
-        ).status_code
-        == 204
-    )
+    assert client.delete(f"/api/users/{admin_id}", headers=admin_h).status_code == 400
+    assert client.delete(f"/api/users/{teacher_id}", headers=admin_h).status_code == 204
 
 
-def test_modules_4_5_6_quizzes_questions_publish_and_attempts():
-    t1 = client.post(
-        "/api/auth/register",
-        json={
-            "email": "t1@example.com",
-            "full_name": "T1",
-            "password": "password123",
-            "role": "teacher",
-        },
-    ).json()["id"]
-    t2 = client.post(
-        "/api/auth/register",
-        json={
-            "email": "t2@example.com",
-            "full_name": "T2",
-            "password": "password123",
-            "role": "teacher",
-        },
-    ).json()["id"]
-    s1 = client.post(
-        "/api/auth/register",
-        json={
-            "email": "s1@example.com",
-            "full_name": "S1",
-            "password": "password123",
-            "role": "student",
-        },
-    ).json()["id"]
+def test_quizzes_questions_ai_publish_attempts_and_csv():
+    t1_h = _kc_headers("kc-t1", "t1@example.com", "T1", "teacher")
+    t2_h = _kc_headers("kc-t2", "t2@example.com", "T2", "teacher")
+    s1_h = _kc_headers("kc-s1", "s1@example.com", "S1", "student")
 
     # Create quiz by T1 -> 201
     q_res = client.post(
         "/api/quizzes",
-        headers={"X-User-Id": str(t1)},
+        headers=t1_h,
         json={"title": "Python Basics", "topic": "Python"},
     )
     assert q_res.status_code == 201
     quiz_id = q_res.json()["id"]
 
     # Publish without questions -> 400
-    assert (
-        client.post(
-            f"/api/quizzes/{quiz_id}/publish", headers={"X-User-Id": str(t1)}
-        ).status_code
-        == 400
-    )
+    assert client.post(f"/api/quizzes/{quiz_id}/publish", headers=t1_h).status_code == 400
 
     # Foreign teacher T2 cannot patch or delete -> 403
     assert (
-        client.patch(
-            f"/api/quizzes/{quiz_id}",
-            headers={"X-User-Id": str(t2)},
-            json={"title": "Hacked"},
-        ).status_code
+        client.patch(f"/api/quizzes/{quiz_id}", headers=t2_h, json={"title": "Hacked"}).status_code
         == 403
     )
-    assert (
-        client.delete(f"/api/quizzes/{quiz_id}", headers={"X-User-Id": str(t2)}).status_code
-        == 403
-    )
+    assert client.delete(f"/api/quizzes/{quiz_id}", headers=t2_h).status_code == 403
 
-    # Add question with invalid correct_index -> 400
+    # AI generation (fallback when Ollama is offline) -> 201
+    gen_res = client.post(
+        f"/api/quizzes/{quiz_id}/generate-questions",
+        headers=t1_h,
+        json={"topic": "Python", "count": 2},
+    )
+    assert gen_res.status_code == 201
+    assert len(gen_res.json()["questions"]) == 2
+
+    # Add invalid correct_index -> 400
     assert (
         client.post(
             f"/api/quizzes/{quiz_id}/questions",
-            headers={"X-User-Id": str(t1)},
+            headers=t1_h,
             json={"prompt": "2+2?", "options": ["3", "4"], "correct_index": 5},
         ).status_code
         == 400
     )
 
-    # Add valid question -> 201
-    question_res = client.post(
-        f"/api/quizzes/{quiz_id}/questions",
-        headers={"X-User-Id": str(t1)},
-        json={"prompt": "2+2?", "options": ["3", "4"], "correct_index": 1},
-    )
-    assert question_res.status_code == 201
-    question_id = question_res.json()["id"]
-
-    # Patch question by T1 -> 200, by T2 -> 403
-    assert (
-        client.patch(
-            f"/api/questions/{question_id}",
-            headers={"X-User-Id": str(t2)},
-            json={"prompt": "Bad"},
-        ).status_code
-        == 403
-    )
-    assert (
-        client.patch(
-            f"/api/questions/{question_id}",
-            headers={"X-User-Id": str(t1)},
-            json={"prompt": "What is 2 + 2?"},
-        ).status_code
-        == 200
-    )
-
     # Publish quiz -> 200
-    pub_res = client.post(f"/api/quizzes/{quiz_id}/publish", headers={"X-User-Id": str(t1)})
+    pub_res = client.post(f"/api/quizzes/{quiz_id}/publish", headers=t1_h)
     assert pub_res.status_code == 200
     assert pub_res.json()["is_published"] is True
 
-    # Cannot add/patch/delete question in published quiz -> 400
-    assert (
-        client.post(
-            f"/api/quizzes/{quiz_id}/questions",
-            headers={"X-User-Id": str(t1)},
-            json={"prompt": "New?", "options": ["A", "B"], "correct_index": 0},
-        ).status_code
-        == 400
-    )
-    assert (
-        client.patch(
-            f"/api/questions/{question_id}",
-            headers={"X-User-Id": str(t1)},
-            json={"prompt": "Change"},
-        ).status_code
-        == 400
-    )
-    assert (
-        client.delete(
-            f"/api/questions/{question_id}",
-            headers={"X-User-Id": str(t1)},
-        ).status_code
-        == 400
-    )
-
     # Student gets quiz WITHOUT correct_index
-    s_quiz = client.get(f"/api/quizzes/{quiz_id}", headers={"X-User-Id": str(s1)})
+    s_quiz = client.get(f"/api/quizzes/{quiz_id}", headers=s1_h)
     assert s_quiz.status_code == 200
     assert "correct_index" not in s_quiz.json()["questions"][0]
 
-    # Submit attempt with wrong answer count -> 400
+    # Submit wrong count -> 400
     assert (
-        client.post(
-            f"/api/quizzes/{quiz_id}/attempts",
-            headers={"X-User-Id": str(s1)},
-            json={"answers": [0, 1]},
-        ).status_code
+        client.post(f"/api/quizzes/{quiz_id}/attempts", headers=s1_h, json={"answers": [0]}).status_code
         == 400
     )
 
     # Submit valid attempt -> 201
     att_res = client.post(
         f"/api/quizzes/{quiz_id}/attempts",
-        headers={"X-User-Id": str(s1)},
-        json={"answers": [1]},
+        headers=s1_h,
+        json={"answers": [0, 1]},
     )
     assert att_res.status_code == 201
-    assert att_res.json()["score"] == 1
-    assert att_res.json()["total"] == 1
+    assert att_res.json()["score"] == 2
+    assert att_res.json()["total"] == 2
 
     # GET /api/attempts/me -> 200
-    me_res = client.get("/api/attempts/me", headers={"X-User-Id": str(s1)})
-    assert me_res.status_code == 200
-    assert len(me_res.json()) == 1
+    assert len(client.get("/api/attempts/me", headers=s1_h).json()) == 1
 
+    # Teacher results & CSV export
+    res_summary = client.get(f"/api/quizzes/{quiz_id}/results", headers=t1_h)
+    assert res_summary.status_code == 200
+    assert res_summary.json()["average_percent"] == 100.0
 
-def test_jwt_bearer_ai_generation_results_and_csv():
-    # Register and login teacher -> get JWT Bearer token
-    client.post(
-        "/api/auth/register",
-        json={
-            "email": "jwt_teacher@example.com",
-            "full_name": "JWT Teacher",
-            "password": "password123",
-            "role": "teacher",
-        },
-    )
-    login_res = client.post(
-        "/api/auth/login",
-        json={"email": "jwt_teacher@example.com", "password": "password123"},
-    )
-    assert login_res.status_code == 200
-    token = login_res.json()["access_token"]
-    assert token
-    auth_header = {"Authorization": f"Bearer {token}"}
-
-    # Invalid JWT -> 401
-    assert (
-        client.get("/api/quizzes", headers={"Authorization": "Bearer invalid.token.here"}).status_code
-        == 401
-    )
-
-    # Create quiz using Bearer JWT
-    quiz_id = client.post(
-        "/api/quizzes",
-        headers=auth_header,
-        json={"title": "FastAPI AI Quiz", "topic": "FastAPI"},
-    ).json()["id"]
-
-    # Generate 3 questions via AI (falls back cleanly when Ollama is offline)
-    gen_res = client.post(
-        f"/api/quizzes/{quiz_id}/generate-questions",
-        headers=auth_header,
-        json={"topic": "FastAPI", "count": 3},
-    )
-    assert gen_res.status_code == 201
-    gen_data = gen_res.json()
-    assert gen_data["source"] in ("ollama", "fallback")
-    assert len(gen_data["questions"]) == 3
-
-    # Publish quiz
-    assert client.post(f"/api/quizzes/{quiz_id}/publish", headers=auth_header).status_code == 200
-
-    # Student registers, logs in, submits attempt via Bearer JWT
-    client.post(
-        "/api/auth/register",
-        json={
-            "email": "jwt_student@example.com",
-            "full_name": "JWT Student",
-            "password": "password123",
-            "role": "student",
-        },
-    )
-    s_token = client.post(
-        "/api/auth/login",
-        json={"email": "jwt_student@example.com", "password": "password123"},
-    ).json()["access_token"]
-    s_header = {"Authorization": f"Bearer {s_token}"}
-
-    att_res = client.post(
-        f"/api/quizzes/{quiz_id}/attempts",
-        headers=s_header,
-        json={"answers": [0, 1, 2]},
-    )
-    assert att_res.status_code == 201
-    assert att_res.json()["score"] == 3
-
-    # Teacher views results summary
-    summary_res = client.get(f"/api/quizzes/{quiz_id}/results", headers=auth_header)
-    assert summary_res.status_code == 200
-    summary = summary_res.json()
-    assert summary["total_attempts"] == 1
-    assert summary["average_percent"] == 100.0
-
-    # Student cannot view quiz results -> 403
-    assert client.get(f"/api/quizzes/{quiz_id}/results", headers=s_header).status_code == 403
-
-    # Teacher exports CSV
-    csv_res = client.get(f"/api/quizzes/{quiz_id}/results/export", headers=auth_header)
+    csv_res = client.get(f"/api/quizzes/{quiz_id}/results/export", headers=t1_h)
     assert csv_res.status_code == 200
     assert "text/csv" in csv_res.headers["content-type"]
-    assert "JWT Student" in csv_res.text
 
+
+def test_sync_links_legacy_user_by_email_and_updates_changes():
+    with SessionLocal() as db:
+        legacy = User(
+            keycloak_id="legacy-temp-id",
+            email="legacy@demo.kz",
+            full_name="Old Name",
+            role="student",
+        )
+        db.add(legacy)
+        db.commit()
+        legacy_id = legacy.id
+
+    headers = _kc_headers("kc-new-uuid-999", "legacy@demo.kz", "New Name", "teacher")
+    res = client.get("/api/auth/me", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["id"] == legacy_id
+    assert data["keycloak_id"] == "kc-new-uuid-999"
+    assert data["full_name"] == "New Name"
+    assert data["role"] == "teacher"

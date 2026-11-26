@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -26,12 +28,17 @@ class UserRepository:
     def create(
         self,
         *,
+        keycloak_id: str,
         email: str,
         full_name: str,
         role: str = "student",
-        keycloak_id: str | None = None,
     ) -> User:
-        user = User(email=email, full_name=full_name, role=role, keycloak_id=keycloak_id)
+        user = User(
+            keycloak_id=keycloak_id,
+            email=email,
+            full_name=full_name,
+            role=role,
+        )
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
@@ -46,3 +53,43 @@ class UserRepository:
     def delete(self, user: User) -> None:
         self.db.delete(user)
         self.db.commit()
+
+    def sync(self, identity: dict[str, Any], role: str) -> User:
+        sub = str(identity["sub"])
+        email = str(
+            identity.get("email")
+            or identity.get("preferred_username")
+            or f"{sub}@quizai.local"
+        )
+        full_name = str(
+            identity.get("name")
+            or f"{identity.get('given_name', '')} {identity.get('family_name', '')}".strip()
+            or email.split("@")[0]
+        )[:120]
+
+        user = self.get_by_keycloak_id(sub)
+        if user is None:
+            user = self.get_by_email(email)
+            if user is not None:
+                user.keycloak_id = sub
+                user.full_name = full_name
+                user.role = role
+                return self.save(user)
+            return self.create(
+                keycloak_id=sub,
+                email=email,
+                full_name=full_name,
+                role=role,
+            )
+
+        changed = False
+        if user.email != email:
+            user.email = email
+            changed = True
+        if user.full_name != full_name:
+            user.full_name = full_name
+            changed = True
+        if user.role != role:
+            user.role = role
+            changed = True
+        return self.save(user) if changed else user

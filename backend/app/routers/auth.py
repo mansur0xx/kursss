@@ -1,33 +1,12 @@
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 
-from app.core.database import get_db
-from app.core.jwt_utils import create_access_token
-from app.routers.deps import raise_http_error
-from app.schemas.user import LoginResponse, UserLogin, UserRead, UserRegister
-from app.services.auth_service import AuthService
-from app.services.exceptions import AppError
+from app.models.user import User
+from app.routers.deps import get_current_user
+from app.schemas.user import UserRead
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
-@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserRead:
-    service = AuthService(db)
-    try:
-        user = service.register(payload)
-        return UserRead.model_validate(user)
-    except AppError as exc:
-        raise_http_error(exc)
-
-
-@router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
-def login(payload: UserLogin, db: Session = Depends(get_db)) -> LoginResponse:
-    service = AuthService(db)
-    try:
-        user = service.login(payload)
-        token = create_access_token(user_id=user.id, role=user.role, email=user.email)
-        base = UserRead.model_validate(user)
-        return LoginResponse(**base.model_dump(), access_token=token, token_type="bearer")
-    except AppError as exc:
-        raise_http_error(exc)
+@router.get("/me", response_model=UserRead)
+def get_me(current_user: User = Depends(get_current_user)) -> UserRead:
+    return UserRead.model_validate(current_user)

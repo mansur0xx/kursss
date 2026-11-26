@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
 from app.routers.deps import get_current_user, raise_http_error
-from app.schemas.user import UserRead, UserUpdate
+from app.schemas.user import UserRead
 from app.services.exceptions import AppError
 from app.services.user_service import UserService
 
@@ -33,21 +33,6 @@ def get_user(
     service = UserService(db)
     try:
         user = service.get_user(user_id, current_user)
-        return UserRead.model_validate(user)
-    except AppError as exc:
-        raise_http_error(exc)
-
-
-@router.patch("/{user_id}", response_model=UserRead)
-def update_user(
-    user_id: int,
-    payload: UserUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> UserRead:
-    service = UserService(db)
-    try:
-        user = service.update_user(user_id, payload, current_user)
         return UserRead.model_validate(user)
     except AppError as exc:
         raise_http_error(exc)
