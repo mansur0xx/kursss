@@ -29,27 +29,34 @@ class Settings(BaseSettings):
         )
 
     # Keycloak OIDC
-    KEYCLOAK_SERVER_URL: str = "http://localhost:8080"
-    KEYCLOAK_REALM: str = "quizai"
-    KEYCLOAK_CLIENT_ID: str = "quizai-web"
-    KEYCLOAK_AUDIENCE: str = "quizai-api"
-    KEYCLOAK_CLIENT_SECRET: str = ""
+    keycloak_issuer: str = Field(
+        default="http://localhost:8080/realms/quizai",
+        validation_alias=AliasChoices("KEYCLOAK_ISSUER", "keycloak_issuer"),
+    )
+    keycloak_jwks_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KEYCLOAK_JWKS_URL", "keycloak_jwks_url"),
+    )
+    keycloak_audience: str = Field(
+        default="quizai-api",
+        validation_alias=AliasChoices("KEYCLOAK_AUDIENCE", "keycloak_audience"),
+    )
+    keycloak_client_id: str = Field(
+        default="quizai-web",
+        validation_alias=AliasChoices("KEYCLOAK_CLIENT_ID", "keycloak_client_id"),
+    )
 
     @property
-    def keycloak_issuer(self) -> str:
-        return f"{self.KEYCLOAK_SERVER_URL.rstrip('/')}/realms/{self.KEYCLOAK_REALM}"
-
-    @property
-    def keycloak_jwks_url(self) -> str:
-        return f"{self.keycloak_issuer}/protocol/openid-connect/certs"
+    def jwks_url(self) -> str:
+        return self.keycloak_jwks_url or f"{self.keycloak_issuer.rstrip('/')}/protocol/openid-connect/certs"
 
     @property
     def keycloak_auth_url(self) -> str:
-        return f"{self.keycloak_issuer}/protocol/openid-connect/auth"
+        return f"{self.keycloak_issuer.rstrip('/')}/protocol/openid-connect/auth"
 
     @property
     def keycloak_token_url(self) -> str:
-        return f"{self.keycloak_issuer}/protocol/openid-connect/token"
+        return f"{self.keycloak_issuer.rstrip('/')}/protocol/openid-connect/token"
 
     # Ollama Local LLM
     OLLAMA_BASE_URL: str = "http://ollama:11434"
@@ -60,10 +67,6 @@ class Settings(BaseSettings):
 
     # RabbitMQ Broker
     RABBITMQ_URL: str = "amqp://guest:guest@rabbitmq:5672/"
-
-    # JWT Auth (local dev default; override in .env for production)
-    JWT_SECRET_KEY: str = "change-me-local-only"
-    JWT_EXPIRE_MINUTES: int = 60
 
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = [
