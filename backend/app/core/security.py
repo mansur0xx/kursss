@@ -1,69 +1,62 @@
-from typing import Annotated, Any
+from dataclasses import dataclass
+from typing import Any, Protocol
+from urllib.error import URLError
 
 import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-security_bearer = HTTPBearer()
+APP_ROLES = ("admin", "teacher", "student")
 
 
-class AuthenticatedUser:
-    def __init__(self, sub: str, email: str, roles: list[str], raw_token: dict[str, Any]):
-        self.id = sub
-        self.email = email
-        self.roles = roles
-        self.raw_token = raw_token
-
-    def has_role(self, role: str) -> bool:
-        return role in self.roles
+class AuthUnavailableError(Exception):
+    pass
 
 
-async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security_bearer)]
-) -> AuthenticatedUser:
-    """
-    Keycloak JWT токенін тексеру және пайдаланушы деректерін (рөлдерін) алу.
-    """
-    token = credentials.credentials
-    try:
-        # Продакшнда Keycloak JWKS public key арқылы верификацияланады.
-        # Бастапқы кезеңде токеннің payload бөлігі декодталады.
-        payload = jwt.decode(token, options={"verify_signature": False})
+@dataclass(frozen=True)
+class Identity:
+    keycloak_id: str
+    email: str
+    full_name: str
+    role: str | None
 
-        user_id: str = payload.get("sub", "")
-        email: str = payload.get("email", "")
 
-        # Keycloak realm_access рөлдерін алу
-        realm_access = payload.get("realm_access", {})
-        roles: list[str] = realm_access.get("roles", [])
+class TokenVerifier(Protocol):
+    def verify(self, token: str) -> dict[str, Any]: ...
 
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Токеннен пайдаланушы ID табылмады"
-            )
 
-        return AuthenticatedUser(sub=user_id, email=email, roles=roles, raw_token=payload)
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Жарамсыз немесе мерзімі өткен токен"
+class KeycloakVerifier:
+    def __init__(self, issuer: str, jwks_url: str, audience: str) -> None:
+        self.issuer = issuer
+        self.audience = audience
+        self._jwks = jwt.PyJWKClient(jwks_url, cache_keys=True)
+
+    def verify(self, token: str) -> dict[str, Any]:
+        try:
+            key = self._jwks.get_signing_key_from_jwt(token)
+        except (jwt.PyJWKClientConnectionError, URLError, OSError) as exc:
+            raise AuthUnavailableError("Keycloak JWKS қолжетімсіз") from exc
+        return jwt.decode(
+            token,
+            key.key,
+            algorithms=["RS256"],
+            issuer=self.issuer,
+            audience=self.audience,
+            options={"require": ["exp", "iat", "iss", "sub", "aud"]},
         )
 
 
-def require_roles(allowed_roles: list[str]):
-    """
-    Рөлге негізделген қолжетімділікті тексеру dependency (RBAC: student, teacher, admin).
-    """
-    async def role_checker(
-        current_user: Annotated[AuthenticatedUser, Depends(get_current_user)]
-    ) -> AuthenticatedUser:
-        if not any(role in current_user.roles for role in allowed_roles):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Бұл әрекетке рұқсат жоқ. Қажетті рөлдер: {allowed_roles}"
-            )
-        return current_user
-
-    return role_checker
-
+def identity_from_claims(claims: dict[str, Any]) -> Identity:
+    sub = str(claims["sub"])
+    email = str(claims.get("email") or claims.get("preferred_username") or f"{sub}@quizai.local")
+    full_name = str(
+        claims.get("name")
+        or f"{claims.get('given_name', '')} {claims.get('family_name', '')}".strip()
+        or email.split("@")[0]
+    )[:120]
+    roles = set(claims.get("realm_access", {}).get("roles", []))
+    role = next((r for r in APP_ROLES if r in roles), None)
+    return Identity(
+        keycloak_id=sub,
+        email=email,
+        full_name=full_name,
+        role=role,
+    )

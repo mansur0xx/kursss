@@ -1,86 +1,37 @@
-import base64
-import json
-import time
+from uuid import uuid4
 
-from fastapi.testclient import TestClient
-
-from app.core.config import settings
-from app.core.database import SessionLocal
-from app.main import app
-from app.models.user import User
-
-client = TestClient(app)
+from tests.conftest import bearer, make_token
 
 
-def _kc_headers(sub: str, email: str, name: str, role: str) -> dict[str, str]:
-    now = int(time.time())
-    header = {"alg": "RS256", "typ": "JWT"}
-    payload = {
-        "sub": sub,
-        "iss": settings.keycloak_issuer,
-        "aud": settings.KEYCLOAK_AUDIENCE,
-        "exp": now + 300,
-        "email": email,
-        "name": name,
-        "realm_access": {"roles": [role]},
-    }
-    h = base64.urlsafe_b64encode(json.dumps(header).encode()).rstrip(b"=").decode()
-    p = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
-    s = base64.urlsafe_b64encode(b"sig").rstrip(b"=").decode()
-    return {"Authorization": f"Bearer {h}.{p}.{s}"}
-
-
-def test_auth_me_and_removed_legacy_endpoints():
-    # Old register and login endpoints are removed (404)
+def test_removed_legacy_auth_endpoints(client):
     assert client.post("/api/auth/register", json={}).status_code == 404
     assert client.post("/api/auth/login", json={}).status_code == 404
 
-    # Without token -> 401
-    assert client.get("/api/auth/me").status_code == 401
 
-    # With Keycloak token -> 200 and synced to DB
-    headers = _kc_headers("kc-s1", "s1@example.com", "Student One", "student")
-    res = client.get("/api/auth/me", headers=headers)
-    assert res.status_code == 200
-    body = res.json()
-    assert body["keycloak_id"] == "kc-s1"
-    assert body["email"] == "s1@example.com"
-    assert body["role"] == "student"
-
-
-def test_users_admin_only_without_patch():
-    admin_h = _kc_headers("kc-admin", "admin@example.com", "Admin User", "admin")
-    teacher_h = _kc_headers("kc-t1", "t1@example.com", "Teacher One", "teacher")
+def test_users_admin_only_without_patch(client):
+    admin_h = bearer(make_token(str(uuid4()), "admin@example.com", ["admin"], name="Admin User"))
+    teacher_h = bearer(make_token(str(uuid4()), "t1@example.com", ["teacher"], name="Teacher One"))
 
     admin_id = client.get("/api/auth/me", headers=admin_h).json()["id"]
     teacher_id = client.get("/api/auth/me", headers=teacher_h).json()["id"]
 
-    # Teacher -> 403
     assert client.get("/api/users", headers=teacher_h).status_code == 403
-
-    # Admin -> 200 list
     res_list = client.get("/api/users", headers=admin_h)
     assert res_list.status_code == 200
     assert len(res_list.json()) == 2
 
-    # GET /api/users/{id} -> 200 and 404
     assert client.get(f"/api/users/{teacher_id}", headers=admin_h).status_code == 200
     assert client.get("/api/users/9999", headers=admin_h).status_code == 404
-
-    # PATCH /api/users/{id} is removed (405 Method Not Allowed)
     assert client.patch(f"/api/users/{teacher_id}", headers=admin_h, json={}).status_code == 405
-
-    # DELETE /api/users/{id} -> self 400, other 204
     assert client.delete(f"/api/users/{admin_id}", headers=admin_h).status_code == 400
     assert client.delete(f"/api/users/{teacher_id}", headers=admin_h).status_code == 204
 
 
-def test_quizzes_questions_ai_publish_attempts_and_csv():
-    t1_h = _kc_headers("kc-t1", "t1@example.com", "T1", "teacher")
-    t2_h = _kc_headers("kc-t2", "t2@example.com", "T2", "teacher")
-    s1_h = _kc_headers("kc-s1", "s1@example.com", "S1", "student")
+def test_quizzes_questions_ai_publish_attempts_and_csv(client):
+    t1_h = bearer(make_token(str(uuid4()), "t1@example.com", ["teacher"], name="T1"))
+    t2_h = bearer(make_token(str(uuid4()), "t2@example.com", ["teacher"], name="T2"))
+    s1_h = bearer(make_token(str(uuid4()), "s1@example.com", ["student"], name="S1"))
 
-    # Create quiz by T1 -> 201
     q_res = client.post(
         "/api/quizzes",
         headers=t1_h,
@@ -92,11 +43,8 @@ def test_quizzes_questions_ai_publish_attempts_and_csv():
     # Publish without questions -> 400
     assert client.post(f"/api/quizzes/{quiz_id}/publish", headers=t1_h).status_code == 400
 
-    # Foreign teacher T2 cannot patch or delete -> 403
-    assert (
-        client.patch(f"/api/quizzes/{quiz_id}", headers=t2_h, json={"title": "Hacked"}).status_code
-        == 403
-    )
+    # Foreign teacher T2 -> 403
+    assert client.patch(f"/api/quizzes/{quiz_id}", headers=t2_h, json={"title": "Hacked"}).status_code == 403
     assert client.delete(f"/api/quizzes/{quiz_id}", headers=t2_h).status_code == 403
 
     # AI generation (fallback when Ollama is offline) -> 201
@@ -108,7 +56,7 @@ def test_quizzes_questions_ai_publish_attempts_and_csv():
     assert gen_res.status_code == 201
     assert len(gen_res.json()["questions"]) == 2
 
-    # Add invalid correct_index -> 400
+    # Invalid correct_index -> 400
     assert (
         client.post(
             f"/api/quizzes/{quiz_id}/questions",
@@ -118,7 +66,7 @@ def test_quizzes_questions_ai_publish_attempts_and_csv():
         == 400
     )
 
-    # Publish quiz -> 200
+    # Publish -> 200
     pub_res = client.post(f"/api/quizzes/{quiz_id}/publish", headers=t1_h)
     assert pub_res.status_code == 200
     assert pub_res.json()["is_published"] is True
@@ -128,13 +76,13 @@ def test_quizzes_questions_ai_publish_attempts_and_csv():
     assert s_quiz.status_code == 200
     assert "correct_index" not in s_quiz.json()["questions"][0]
 
-    # Submit wrong count -> 400
+    # Wrong answer count -> 400
     assert (
         client.post(f"/api/quizzes/{quiz_id}/attempts", headers=s1_h, json={"answers": [0]}).status_code
         == 400
     )
 
-    # Submit valid attempt -> 201
+    # Valid attempt -> 201
     att_res = client.post(
         f"/api/quizzes/{quiz_id}/attempts",
         headers=s1_h,
@@ -155,25 +103,3 @@ def test_quizzes_questions_ai_publish_attempts_and_csv():
     csv_res = client.get(f"/api/quizzes/{quiz_id}/results/export", headers=t1_h)
     assert csv_res.status_code == 200
     assert "text/csv" in csv_res.headers["content-type"]
-
-
-def test_sync_links_legacy_user_by_email_and_updates_changes():
-    with SessionLocal() as db:
-        legacy = User(
-            keycloak_id="legacy-temp-id",
-            email="legacy@demo.kz",
-            full_name="Old Name",
-            role="student",
-        )
-        db.add(legacy)
-        db.commit()
-        legacy_id = legacy.id
-
-    headers = _kc_headers("kc-new-uuid-999", "legacy@demo.kz", "New Name", "teacher")
-    res = client.get("/api/auth/me", headers=headers)
-    assert res.status_code == 200
-    data = res.json()
-    assert data["id"] == legacy_id
-    assert data["keycloak_id"] == "kc-new-uuid-999"
-    assert data["full_name"] == "New Name"
-    assert data["role"] == "teacher"

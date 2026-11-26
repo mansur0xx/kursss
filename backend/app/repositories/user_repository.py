@@ -1,8 +1,7 @@
-from typing import Any
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.security import Identity
 from app.models.user import User
 
 
@@ -54,42 +53,31 @@ class UserRepository:
         self.db.delete(user)
         self.db.commit()
 
-    def sync(self, identity: dict[str, Any], role: str) -> User:
-        sub = str(identity["sub"])
-        email = str(
-            identity.get("email")
-            or identity.get("preferred_username")
-            or f"{sub}@quizai.local"
-        )
-        full_name = str(
-            identity.get("name")
-            or f"{identity.get('given_name', '')} {identity.get('family_name', '')}".strip()
-            or email.split("@")[0]
-        )[:120]
-
-        user = self.get_by_keycloak_id(sub)
+    def sync(self, identity: Identity, role: str) -> User:
+        user = self.get_by_keycloak_id(identity.keycloak_id)
         if user is None:
-            user = self.get_by_email(email)
-            if user is not None:
-                user.keycloak_id = sub
-                user.full_name = full_name
-                user.role = role
-                return self.save(user)
-            return self.create(
-                keycloak_id=sub,
-                email=email,
-                full_name=full_name,
+            legacy = self.get_by_email(identity.email)
+            if legacy and legacy.keycloak_id.startswith("legacy-"):
+                user = legacy
+                user.keycloak_id = identity.keycloak_id
+        if user is None:
+            user = User(
+                keycloak_id=identity.keycloak_id,
+                email=identity.email,
+                full_name=identity.full_name,
                 role=role,
             )
-
-        changed = False
-        if user.email != email:
-            user.email = email
-            changed = True
-        if user.full_name != full_name:
-            user.full_name = full_name
-            changed = True
-        if user.role != role:
+            self.db.add(user)
+        elif (
+            (user.email, user.full_name, user.role)
+            == (identity.email, identity.full_name, role)
+            and not self.db.is_modified(user)
+        ):
+            return user
+        else:
+            user.email = identity.email
+            user.full_name = identity.full_name
             user.role = role
-            changed = True
-        return self.save(user) if changed else user
+        self.db.commit()
+        self.db.refresh(user)
+        return user
